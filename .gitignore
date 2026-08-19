@@ -1,0 +1,16 @@
+target/
+*.class
+*.jar
+
+# Microsoft intellectual property - never commit
+*.dll
+*.onemodel
+*.onnx
+natives/
+models/
+vocab_*.txt
+
+# local
+.idea/
+nbproject/private/
+*.log
