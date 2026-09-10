@@ -1,6 +1,6 @@
 package oneocr.onnx;
 
-import xyz.jphil.datahelper.Data;
+import datapotter.datahelper.Data;
 
 @Data
 public final class OcrWord extends OcrWord_A {

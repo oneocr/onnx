@@ -1,6 +1,6 @@
 package oneocr.onnx;
 
-import xyz.jphil.datahelper.Data;
+import datapotter.datahelper.Data;
 
 import java.util.List;
 import java.util.stream.Collectors;
