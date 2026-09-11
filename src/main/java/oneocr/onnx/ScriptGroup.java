@@ -28,6 +28,12 @@ public enum ScriptGroup {
         return index >= 1 && index <= values().length ? Optional.of(BY_CLASSIFIER_INDEX[index - 1]) : Optional.empty();
     }
 
+    /** This script's index in the classifier's score vector; the inverse of {@link #ofClassifierIndex}. */
+    public int classifierIndex() {
+        for (var i = 0; i < BY_CLASSIFIER_INDEX.length; i++) if (BY_CLASSIFIER_INDEX[i] == this) return i + 1;
+        return 0;
+    }
+
     static final ScriptGroup[] BY_CLASSIFIER_INDEX =
             {CJK, CYRILLIC, LATIN, ARABIC, DEVANAGARI, GREEK, THAI, HEBREW, TAMIL};
 

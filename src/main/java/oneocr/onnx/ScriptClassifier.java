@@ -13,7 +13,7 @@ public final class ScriptClassifier implements AutoCloseable {
     final Model model;
 
     public ScriptClassifier(OrtEnvironment env, Path file, boolean gpu) throws OrtException {
-        this.model = new Model(env, file, gpu);
+        this.model = new Model(env, file, gpu, Threads.classifier());
     }
 
     public ScriptVerdict classify(Raster crop) throws OrtException {
@@ -24,7 +24,7 @@ public final class ScriptClassifier implements AutoCloseable {
             var scores = out.get(SCRIPT_ID_SCORE);
             var flip = out.get(FLIP_SCORE);
             return new ScriptVerdict(Tensors.argmax(scores.data, 0, scores.length()),
-                    flip.length() > 0 ? flip.at(0) : 0f);
+                    flip.length() > 0 ? flip.at(0) : 0f, scores.data);
         }
     }
 

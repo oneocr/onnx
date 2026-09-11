@@ -19,23 +19,42 @@ public final class TextDetector implements AutoCloseable {
     }
 
     public TextDetector(OrtEnvironment env, Path file, boolean gpu) throws OrtException {
-        this.model = new Model(env, file, gpu);
+        this.model = new Model(env, file, gpu, Threads.detector());
     }
 
     public List<DetectionMaps> run(Raster image, int maxSide) throws OrtException {
-        var scale = Math.min((double) maxSide / Math.max(image.width, image.height), 1.0);
-        var targetWidth = fit(image.width * scale);
-        var targetHeight = fit(image.height * scale);
-        var resized = image.resize(targetWidth, targetHeight);
+        var target = targetSize(image.width, image.height, maxSide);
+        return runResized(image.resize(target[0], target[1]), image.width, image.height);
+    }
 
-        var data = model.floats(Tensors.chw(resized, false, false), 1, Raster.CHANNELS, targetHeight, targetWidth);
-        var info = model.floats(new float[]{targetHeight, targetWidth, 1f}, 1, 3);
+    /** The width and height {@link #run} resizes an image of these dimensions to. */
+    public static int[] targetSize(int width, int height, int maxSide) {
+        var scale = Math.min((double) maxSide / Math.max(width, height), 1.0);
+        return new int[]{fit(width * scale), fit(height * scale)};
+    }
+
+    /**
+     * Detects on an image already at model resolution.
+     *
+     * <p>Separated from {@link #run} so a caller needing the same page at several rotations can
+     * resize once and rotate the small raster, instead of rotating the full page and resizing each
+     * time — which is what the orientation search does, four times over.
+     *
+     * @param originalWidth  width the returned coordinates should map back to
+     * @param originalHeight height the returned coordinates should map back to
+     */
+    public List<DetectionMaps> runResized(Raster resized, int originalWidth, int originalHeight) throws OrtException {
+        var width = resized.width;
+        var height = resized.height;
+
+        var data = model.floats(Tensors.chw(resized, false, false), 1, Raster.CHANNELS, height, width);
+        var info = model.floats(new float[]{height, width, 1f}, 1, 3);
         try (data; info) {
             var out = model.run(Map.of(DATA, data, IM_INFO, info), names());
             var levels = new ArrayList<DetectionMaps>(LEVELS.length);
             for (var level : LEVELS)
-                levels.add(maps(out, level, targetWidth,
-                        (double) targetWidth / image.width, (double) targetHeight / image.height));
+                levels.add(maps(out, level, width,
+                        (double) width / originalWidth, (double) height / originalHeight));
             return levels;
         }
     }

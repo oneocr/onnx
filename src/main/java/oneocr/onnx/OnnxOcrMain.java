@@ -23,8 +23,22 @@ public final class OnnxOcrMain implements Callable<Integer> {
             + "cjk, cyrillic, latin, arabic, devanagari, greek, thai, hebrew, tamil.")
     String language;
 
-    @Option(names = {"-r", "--rotation"}, description = "Force 0, 90, 180 or 270 instead of estimating it.")
+    @Option(names = {"-r", "--rotation"}, description = "Force 0, 90, 180 or 270 instead of estimating it. "
+            + "A page rendered from a PDF is upright: pass 0 and skip the search, which is the single "
+            + "largest saving available and costs nothing in accuracy.")
     Integer rotation;
+
+    @Option(names = "--orientation-search", description = "How hard to look for the rotation when it is "
+            + "not given: FULL tries all four (default), EARLY_EXIT stops at upright when it looks "
+            + "upright and costs one detector call instead of four. EARLY_EXIT can change which angle "
+            + "is chosen; prefer --rotation when the angle is actually known.")
+    OrientationSearch orientationSearch = OrientationSearch.FULL;
+
+    @Option(names = "--candidates", split = ",", description = "Confine the script classifier to these "
+            + "scripts, keeping it per line: e.g. latin,cjk. Use when a document is mixed but not "
+            + "arbitrary. The raw classifier label is noisy — it routes plain English to the cyrillic "
+            + "recognizer — and this corrects the routing without forcing one script on every line.")
+    java.util.List<String> candidates;
 
     @Option(names = {"-d", "--detail"}, description = "Also print per-line boxes, script and confidence to stderr.")
     boolean detail;
@@ -37,27 +51,39 @@ public final class OnnxOcrMain implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        var script = language == null ? null : ScriptGroup.byName(language)
-                .orElseThrow(() -> new IllegalArgumentException("unknown script: " + language));
+        var options = options();
         var source = ImageIO.read(image.toFile());
         if (source == null) throw new IllegalArgumentException("cannot read image: " + image);
 
         var started = System.nanoTime();
         try (var engine = new OneOcrOnnx(ModelPaths.resolve(models), gpu)) {
             var raster = Raster.of(source);
-            var result = engine.recognize(raster, script, rotation);
+            var result = engine.recognize(raster, options);
             System.out.println(result.fullText());
             report(result, started);
-            if (repeat > 1) warm(engine, raster, script);
+            if (repeat > 1) warm(engine, raster, options);
         }
         return 0;
     }
 
-    void warm(OneOcrOnnx engine, Raster raster, ScriptGroup script) throws Exception {
+    OcrOptions options() {
+        var options = OcrOptions.defaults().rotation(rotation).orientationSearch(orientationSearch);
+        if (language != null) options = options.script(named(language));
+        if (candidates != null && !candidates.isEmpty())
+            options = options.candidates(candidates.stream().map(OnnxOcrMain::named).toArray(ScriptGroup[]::new));
+        return options;
+    }
+
+    static ScriptGroup named(String name) {
+        return ScriptGroup.byName(name)
+                .orElseThrow(() -> new IllegalArgumentException("unknown script: " + name));
+    }
+
+    void warm(OneOcrOnnx engine, Raster raster, OcrOptions options) throws Exception {
         var times = new long[repeat];
         for (var i = 0; i < repeat; i++) {
             var t = System.nanoTime();
-            engine.recognize(raster, script, rotation);
+            engine.recognize(raster, options);
             times[i] = System.nanoTime() - t;
         }
         java.util.Arrays.sort(times);
